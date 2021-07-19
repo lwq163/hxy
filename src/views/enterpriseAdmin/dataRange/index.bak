@@ -1,0 +1,552 @@
+<template>
+    <div class="dataRange">
+		<div class="hxy-mb-25">
+			<Table stripe border :columns="rangeTitle" :data="rangeData" :loading="pageLoading"></Table>
+		</div>
+		<div class="pos-r tr">
+			<Page :total="total" :page-size="pageSize" :current="page" placement="top" show-total show-sizer show-elevator @on-change="changePage" @on-page-size-change="changePageSize"></Page>
+		</div>
+
+		<!-- 数据范围管理 -->
+		<Modal
+			:title="title"
+			v-model="dataRangeDialog"
+			@on-cancel="closeDialog"
+			:mask-closable="false"
+			:width="720">
+			<Form :model="dataRangeForm" ref="dataRangeForm" :rules="rulesDataRange" label-position="left" :label-width="50">
+				<Row :gutter="10" class="hxy-mb-20">
+					<Col span="24">
+						当前企业名称：{{masterDeptName[0].masterDeptName}}
+					</Col>
+				</Row>
+				<Row :gutter="10">
+					<Col span="12">
+						<FormItem label="区域" prop="areaId">
+							<tree-select value-consists-of="ALL" :normalizer="normalizer_area" :clearable="true" v-model="dataRangeForm.areaId" :options="areaListData" no-results-text="暂无数据" no-options-text="暂无数据" placeholder="请选择区域" @input="selectAreaId" />
+						</FormItem>
+					</Col>
+					<Col span="12">
+						<FormItem label="部门" prop="deptId">
+							<tree-select value-consists-of="ALL" :normalizer="normalizer" :clearable="true" v-model="dataRangeForm.deptId" :options="deptListData" no-results-text="暂无数据" no-options-text="暂无数据" placeholder="请选择部门" @input="selectDeptId" />
+						</FormItem>
+					</Col>
+					<Col span="12">
+						<FormItem label="报表" prop="reportId">
+							<Select v-model="dataRangeForm.reportId" placeholder="请选择报表" clearable filterable @on-change="selectReportId">
+								<Option v-for="(val,index) in reportList" :value="val.id" :key="index">{{val.name}}</Option>
+							</Select>
+						</FormItem>
+					</Col>
+				</Row>
+				<div>
+					<Table ref="dataRangeTable" stripe border :columns="dataManageTitle" :data="dataManageData" :loading="dataRangePageLoading" @on-select-all="selectAll" @on-select-all-cancel="selectAllCancel" @on-select="selectOne" @on-select-cancel="selectCancel"></Table>
+				</div>
+			</Form>
+			<div slot="footer">
+				<Button type="default" @click="closeDialog">取消</Button>
+				<Button type="primary" @click="handleSubmit" :loading="btnLoading">确定</Button>
+			</div>
+		</Modal>
+    </div>
+</template>
+
+<script>
+import util from '_m/util'
+import {getRoleDataRangeList,getAreaDeptBaseDataBuinessReport,getDataByRoleId} from '_s/enterpriseAdmin'
+import {getDeptEmpList} from '_s/department'
+import {getAreaList} from '_s/area'
+import { mapGetters } from 'vuex'
+export default {
+	data() {
+		return {
+			page: 1, // 页数
+			pageSize: 10, // 每页显示数量
+			total: 0,
+			pageLoading: false,//页面loading动画
+			dataRangePageLoading: false,// 弹窗页面tableloading动画
+			title: '',
+            rangeTitle: [
+                {
+					title: '序号',
+					type: 'index',
+					resizable: true,
+					align: 'center',
+					width: 80
+				},
+				{
+					title: '角色id',
+					key: 'roleId',
+					resizable: true,
+					width: 120
+				},
+				{
+					title: '角色名称',
+					key: 'roleName',
+					resizable: true,
+				},
+				{
+					title: '区域',
+					key: 'areaIds',
+					resizable: true,
+					width: 150,
+					align: 'center',
+					render: (h, params) => {
+						let btnArr = [
+							h('Button', {
+								props: {
+									type: 'text',
+									size: 'small',
+									ghost: true
+								},
+								style: {
+									color: '#2d8cf0',
+								},
+								on: {
+									click: () => {
+										this.toView(params.row)
+									}
+								}
+							}, '详情')
+						]
+						return h('div', btnArr)
+					}
+				},
+				{
+					title: '部门',
+					key: 'deptIds',
+					resizable: true,
+					width: 150,
+					align: 'center',
+					render: (h, params) => {
+						let btnArr = [
+							h('Button', {
+								props: {
+									type: 'text',
+									size: 'small',
+									ghost: true
+								},
+								style: {
+									color: '#2d8cf0',
+								},
+								on: {
+									click: () => {
+										this.toView(params.row)
+									}
+								}
+							}, '详情')
+						]
+						return h('div', btnArr)
+					}
+				},
+				{
+					title: '基础数据',
+					key: 'dataIds',
+					resizable: true,
+					width: 150,
+					align: 'center',
+					render: (h, params) => {
+						let btnArr = [
+							h('Button', {
+								props: {
+									type: 'text',
+									size: 'small',
+									ghost: true
+								},
+								style: {
+									color: '#2d8cf0',
+								},
+								on: {
+									click: () => {
+										this.toView(params.row)
+									}
+								}
+							}, '详情')
+						]
+						return h('div', btnArr)
+					}
+				},
+				{
+					title: '业务单据',
+					resizable: true,
+					width: 150,
+					align: 'center',
+					render: (h, params) => {
+						let btnArr = [
+							h('Button', {
+								props: {
+									type: 'text',
+									size: 'small',
+									ghost: true
+								},
+								style: {
+									color: '#2d8cf0',
+								},
+								on: {
+									click: () => {
+										this.toView(params.row)
+									}
+								}
+							}, '详情')
+						]
+						return h('div', btnArr)
+					}
+				},
+				{
+					title: '报价清单',
+					resizable: true,
+					width: 150,
+					align: 'center',
+					render: (h, params) => {
+						let btnArr = [
+							h('Button', {
+								props: {
+									type: 'text',
+									size: 'small',
+									ghost: true
+								},
+								style: {
+									color: '#2d8cf0',
+								},
+								on: {
+									click: () => {
+										this.toView(params.row)
+									}
+								}
+							}, '详情')
+						]
+						return h('div', btnArr)
+					}
+				},
+                {
+					title:'操作',
+					key:'action',
+					width: 150,
+					align: 'center',
+					fixed: 'right',
+					render: (h, params) => {
+						let btnArr = [
+							h('Button', {
+								props: {
+									type: 'primary',
+									size: 'small'
+								},
+								style: {
+									marginRight: '5px'
+								},
+								on: {
+									click: () => {
+										this.toEdit(params.row)
+									}
+								}
+							}, '编辑')
+						]
+						return h('div', btnArr)
+					}
+				}
+            ],
+            rangeData: [],
+            btnLoading: false,
+			dataRangeDialog: false,
+			dataRangeForm: {
+				areaId: undefined,
+				deptId: undefined,
+				reportId: ''
+			},
+			rulesDataRange: {},
+			dataManageTitle: [
+				{
+					type: 'selection',
+					width: 60,
+					align: 'center'
+				},
+				{
+					title: '数据名称',
+					width: 150,
+					key: 'name',
+				},
+				{
+					title: '详细功能',
+					render: (h, params) => {
+						let list = []
+						let data = params.row.list
+						if(data && data.length > 0) {
+							data.forEach((value,key) => {
+								list.push(
+									h('Checkbox', {
+										props: {
+											label: value.id
+										},
+										style: {
+											marginRight: '10px',
+											marginBottom: '5px'
+										}
+									},value.name)
+								)
+							})
+						}
+						return h('CheckboxGroup',{
+							props: {
+								value: this.checkedIds,
+							},
+							style: {
+								padding:'10px 0'
+							},
+							 on:{
+								'on-change':(val) => {
+									this.checkedIds = val
+									console.log('checkedIds',this.checkedIds)
+								}
+							}
+						},list)
+					}
+				}
+			],
+			dataManageData: [],
+			masterDeptId: '',
+			masterDeptName: '',
+			areaList: [],
+			deptList: [],
+			reportList: [],
+			checkedIds: [],
+			defaultCheckedIds: [],
+			keys: [],
+			ids: [],
+			areaIds: [],
+			deptIds: [],
+			baseDataIds: [],
+			buinessDataIds: [],
+			reportDataIds: [],
+			deptListData: [],
+			areaListData: []
+		}
+	},
+	computed:{
+		...mapGetters([
+			'get_deptList'
+		])
+	},
+	created() {
+		this.masterDeptId = parseInt(util.getStorage('masterDeptId'))
+		this.masterDeptName = this.get_deptList.filter(item => {
+			return item.masterDeptId == this.masterDeptId
+		})
+	},
+	mounted() {
+		this.getRoleDataRangeListData()
+		this.getDeptEmpListData()
+		this.getAreaListData()
+		this.getAreaDeptBaseDataBuinessReportData()
+	},
+	methods: {
+        // 获取角色数据范围管理列表
+        getRoleDataRangeListData() {
+            this.pageLoading = true
+			let params = {
+				pageNum  : this.page,
+				pageSize : this.pageSize
+			}
+            getRoleDataRangeList(params).then(res => {
+                if(res.code===200) {
+                    this.pageLoading = false
+					this.rangeData = res.rows
+					this.total = res.total
+                }
+            }).catch(err => {
+				this.pageLoading = false
+			})
+        },
+		// 获取当前企业的区域 部门 基础数据 业务单据 报表清单所有的
+        getAreaDeptBaseDataBuinessReportData() {
+			this.checkedIds = []
+			this.dataRangePageLoading = true
+			let params = {
+				areaId: this.dataRangeForm.areaId || '',
+				deptId: this.dataRangeForm.deptId || '',
+				reportId: this.dataRangeForm.reportId || '',
+			}
+            getAreaDeptBaseDataBuinessReport(params).then(res => {
+                if(res.code===200) {
+					this.dataRangePageLoading = false
+					let val = res.data
+					this.dataManageData = val
+					this.areaList = val.filter(item=>item.key=='areas')[0].list
+					this.deptList = val.filter(item=>item.key=='depts')[0].list
+					this.reportList = val.filter(item=>item.key=='reports')[0].list
+                }
+            }).catch(err => {
+				this.dataRangePageLoading = false
+			})
+		},
+		// 根据roleid获取当前数据
+		getDataByRoleIdData(roleId) {
+			let params = {
+				roleId: roleId
+			}
+			getDataByRoleId(params).then(res => {
+                if(res.code===200) {
+					let val = res.data
+					this.areaIds = val.areaIds
+					this.deptIds = val.deptIds
+					this.baseDataIds = val.baseDataIds
+					this.buinessDataIds = val.buinessDataIds
+					this.reportDataIds = val.reportDataIds
+					this.checkedIds = this.areaIds.concat(this.deptIds,this.baseDataIds,this.buinessDataIds,this.reportDataIds)
+					console.log('1',this.checkedIds)
+                }
+            })
+		},
+		// 选择区域
+		selectAreaId(e) {
+			this.dataRangeForm.areaId = e
+			this.getAreaDeptBaseDataBuinessReportData()
+		},
+		// 自定义区域键值
+		normalizer_area(node) {
+			if (node.children && !node.children.length) {
+				delete node.children;
+			}
+			return {
+				id: node.areaId,
+				label: node.areaName,
+				children: node.children,
+				isDefaultExpanded: true
+			}
+		},
+		// 选择部门
+		selectDeptId(e) {
+			this.dataRangeForm.deptId = e
+			this.getAreaDeptBaseDataBuinessReportData()
+		},
+		// 自定义部门键值
+		normalizer(node) {
+			if (node.children && !node.children.length) {
+				delete node.children;
+			}
+			return {
+				id: node.deptId,
+				label: node.deptName,
+				children: node.children,
+				isDefaultExpanded: true
+			}
+		},
+		// 查询当前企业部门
+		getDeptEmpListData() {
+			this.pageLoading = true
+			let masterDeptId = parseInt(util.getStorage('masterDeptId'))
+			getDeptEmpList(masterDeptId).then(res => {
+				if(res.code===200) {
+					this.deptListData = []
+					this.pageLoading = false
+					this.deptListData.push(res.data)
+					util.setArr(this.deptListData)
+				}
+			}).catch(err => {
+				this.pageLoading = false
+			})
+		},
+		// 查询区域列表
+		getAreaListData() {
+			let params = {
+				masterDeptId: parseInt(util.getStorage('masterDeptId'))
+			}
+			getAreaList(params).then(res => {
+				if(res.code===200) {
+					this.areaListData = res.data
+				}
+			}).catch(err => {
+			})
+		},
+		// 选择报表
+		selectReportId(e) {
+			this.dataRangeForm.reportId = e
+			this.getAreaDeptBaseDataBuinessReportData()
+		},
+		// 打开编辑对话框
+		toEdit(data) {
+			this.resetForm()
+			this.dataRangeDialog = true
+			this.title = '数据范围管理'
+			this.getDataByRoleIdData(data.roleId)
+		},
+		// 全选
+		selectAll(selection) {
+			console.log(selection)
+			// this.keys = selection.map(item => item.key)
+			// this.ids = selection.map(item => item.id)
+			// this.areasIds = []
+			// this.deptIds = []
+			// this.baseDataIds = []
+			// this.buinessDataIds = []
+			// this.reportDataIds = []
+			// this.$nextTick(() => {
+			// 	this.areaIds = util.filterArr(this.keys,'areas',selection)
+			// 	this.deptIds = util.filterArr(this.keys,'depts',selection)
+			// 	this.baseDataIds = util.filterArr(this.keys,'baseDatas',selection)
+			// 	this.buinessDataIds = util.filterArr(this.keys,'buiness',selection)
+			// 	this.reportDataIds = util.filterArr(this.keys,'reports',selection)
+			// 	this.checkedIds = this.areaIds.concat(this.deptIds,this.baseDataIds,this.buinessDataIds,this.reportDataIds)
+			// 	console.log('checkedIds-all',this.checkedIds)
+			// })
+			selection.forEach((value,index) => {
+				value.list.forEach((v,index)=> {
+					this.checkedIds.push(v.id)
+				})
+			})
+			console.log('checkedIds-all',this.checkedIds)
+		},
+		// 全选取消
+		selectAllCancel(selection) {
+			this.checkedIds = []
+			console.log('checkedIds-all-cancel',this.checkedIds)
+		},
+		// 选择row
+		selectOne(selection,row) {
+			this.ids = row.list.map(item=>item.id)
+			this.checkedIds.push(...this.ids)
+			this.checkedIds = [...new Set(this.checkedIds)]
+			console.log('checkedIds-row',this.checkedIds)
+		},
+		// 取消选择row
+		selectCancel(selection,row) {
+			this.ids = row.list.map(item=>item.id)
+			this.checkedIds = this.checkedIds.filter(item=>!this.ids.includes(item))
+			console.log('checkedIds-row-cancel',this.checkedIds)
+		},
+		// 编辑
+		handleSubmit() {},
+        // 关闭
+        closeDialog() {
+            this.dataRangeDialog = false
+        },
+        // 清空
+		resetForm() {
+			this.checkedIds = []
+			this.defaultCheckedIds = []
+			this.ids = []
+			this.keys = []
+			this.btnLoading = false
+			this.$refs['dataRangeForm'].resetFields()
+			// 清空多选selection
+			let dataRange = this.$refs['dataRangeTable'].objData
+			for(let k in dataRange) {
+				dataRange[k]._isChecked = false
+			}
+        },
+		// 当前页面
+		changePage(pages) {
+			this.page = pages
+			this.getRoleDataRangeListData()
+		},
+		// 每页显示条数
+		changePageSize(size) {
+			this.pageSize = size
+			this.getRoleDataRangeListData()
+		}
+	}
+}
+</script>
+<style lang="scss" scoped>
+	.dataRange {	
+	}
+</style>
